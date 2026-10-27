@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoboRef</title>
+<meta name="description" content="RoboRef: a foundation reward model built for robot RL, not offline metrics. Trained on densely annotated failures with an asymmetric objective that penalizes reward over-estimation.">
+<meta property="og:title" content="RoboRef: A Foundation Reward Model Built for Robot RL, Not Offline Metrics">
+<meta property="og:description" content="A VLM reward model trained on densely annotated failures with an asymmetric objective, evaluated by the policies it trains.">
+<meta property="og:image" content="https://roboref.github.io/static/img/logo.png">
+<link rel="icon" href="static/img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f6f4;
+    --fg: #18181b;
+    --fg-muted: #5b5b63;
+    --border: #e4e4e0;
+    --accent: #d7191f;        /* the referee's red card */
+    --accent-soft: #fdecec;
+    --ok: #1f8a4c;
+    --code-bg: #f3f3f0;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121214;
+      --bg-soft: #1b1b1f;
+      --fg: #ececee;
+      --fg-muted: #a1a1aa;
+      --border: #2c2c32;
+      --accent: #f0484d;
+      --accent-soft: #2d1416;
+      --ok: #4cc283;
+      --code-bg: #1b1b1f;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121214; --bg-soft: #1b1b1f; --fg: #ececee; --fg-muted: #a1a1aa;
+    --border: #2c2c32; --accent: #f0484d; --accent-soft: #2d1416; --ok: #4cc283;
+    --code-bg: #1b1b1f; --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  a { color: inherit; }
+  img { max-width: 100%; display: block; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+  .narrow { max-width: 760px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header { padding: 56px 0 32px; text-align: center; }
+  .logo { width: 84px; margin: 0 auto 18px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo { filter: invert(1) hue-rotate(180deg); } }
+  :root[data-theme="dark"] .logo { filter: invert(1) hue-rotate(180deg); }
+  h1 { font-size: clamp(28px, 4.6vw, 42px); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 22px; font-weight: 700; }
+  h1 .name { color: var(--accent); }
+  .authors { font-size: 17px; margin: 0 0 6px; }
+  .authors span { white-space: nowrap; margin: 0 8px; }
+  .affils { color: var(--fg-muted); font-size: 15px; margin: 0 0 4px; }
+  .affils span { white-space: nowrap; margin: 0 8px; }
+  sup { font-size: .68em; }
+  .contact { color: var(--fg-muted); font-size: 14px; margin: 0 0 18px; }
+  .venue {
+    display: inline-block; font-size: 14px; font-weight: 600; padding: 4px 12px;
+    border: 1px solid var(--border); border-radius: 999px; margin-bottom: 26px;
+  }
+  .buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px;
+    border-radius: 999px; background: var(--fg); color: var(--bg);
+    text-decoration: none; font-weight: 500; font-size: 15px;
+  }
+  .btn svg { width: 17px; height: 17px; }
+  .btn.soon { background: var(--bg-soft); color: var(--fg-muted); border: 1px dashed var(--border); cursor: default; }
+  .btn .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ---------- sections ---------- */
+  section { padding: 40px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 26px; letter-spacing: -.01em; margin: 0 0 18px; text-align: center; }
+  h3 { font-size: 18px; margin: 0 0 8px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 19px; text-align: center; color: var(--fg); max-width: 760px; margin: 0 auto; }
+  .muted { color: var(--fg-muted); }
+  .abstract { text-align: justify; hyphens: auto; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 28px 0 0; }
+  .stat { background: var(--bg-soft); border-radius: 12px; padding: 18px; text-align: center; }
+  .stat b { display: block; font-size: 28px; letter-spacing: -.02em; }
+  .stat span { color: var(--fg-muted); font-size: 14px; line-height: 1.4; display: block; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card { border: 1px solid var(--border); border-radius: 14px; padding: 20px; background: var(--bg); box-shadow: var(--shadow); }
+  .card .num { color: var(--accent); font-weight: 700; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+
+  /* paper figures: white background, so they sit on a white card in both themes */
+  .fig { margin: 0 0 28px; }
+  .fig img { width: 100%; background: #fff; border-radius: 12px; padding: 10px; border: 1px solid var(--border); }
+  .fig figcaption { font-size: 15px; color: var(--fg-muted); margin-top: 10px; }
+  .results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 0 0 28px; }
+  .result { background: var(--bg-soft); border-radius: 12px; padding: 16px 18px; }
+  .result h3 { font-size: 15px; margin: 0 0 6px; }
+  .result table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .result td { padding: 3px 0; }
+  .result td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+  .result tr.ours td { font-weight: 700; color: var(--accent); }
+  .result th { text-align: right; font-weight: 500; font-size: 13px; color: var(--fg-muted); padding-bottom: 4px; }
+
+  /* rollout videos */
+  .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .videos figure { margin: 0; }
+  .videos video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; display: block; }
+  .videos figcaption { font-size: 14px; color: var(--fg-muted); margin-top: 6px; }
+  .videos .ours { color: var(--accent); }
+  .videos .ok { color: var(--ok); font-weight: 600; }
+  .videos .fail { color: var(--accent); font-weight: 600; }
+  code { font-family: "JetBrains Mono", monospace; font-size: .9em; }
+
+  /* dataset teaser */
+  .data-teaser { position: relative; border: 1px solid var(--border); border-radius: 14px; padding: 20px; overflow: hidden; }
+  .sim-strip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .sim-strip figure { margin: 0; }
+  .sim-strip img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+  .sim-strip figcaption { text-align: center; font: 500 13px "JetBrains Mono", monospace; margin-top: 4px; }
+  .score { display: inline-block; min-width: 22px; padding: 0 4px; border-radius: 5px; background: var(--bg-soft); }
+  .score.drop { background: var(--accent-soft); color: var(--accent); }
+  .ribbon {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 18px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 14px;
+    padding: 6px 12px; border-radius: 8px;
+  }
+  .ribbon .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .ribbon .dot { animation: none; } }
+
+  /* bibtex */
+  .bib { position: relative; }
+  pre { background: var(--code-bg); border-radius: 12px; padding: 18px; overflow-x: auto; font: 13.5px/1.55 "JetBrains Mono", monospace; margin: 0; }
+  .copy {
+    position: absolute; top: 10px; right: 10px; font: 500 13px Inter, sans-serif; cursor: pointer;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+  }
+
+  footer { border-top: 1px solid var(--border); padding: 28px 0 40px; text-align: center; font-size: 14px; color: var(--fg-muted); }
+  .theme-toggle {
+    position: fixed; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .theme-toggle svg { width: 18px; height: 18px; }
+
+  @media (max-width: 720px) {
+    header { padding-top: 64px; }
+    .cards, .stats, .results { grid-template-columns: 1fr; }
+    .videos { grid-template-columns: 1fr; }
+    .sim-strip { grid-template-columns: repeat(4, 1fr); }
+    .abstract { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="theme" aria-label="Toggle dark mode">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+</button>
+
+<header class="wrap">
+  <img class="logo" src="static/img/logo.png" alt="RoboRef logo: a robot referee holding up a red card">
+  <h1><span class="name">RoboRef</span>: A Foundation Reward Model<br>Built for Robot RL, Not Offline Metrics</h1>
+
+  <p class="authors">
+    <span>Platon Karageorgis<sup>1,2</sup></span>
+    <span>Leonardo Barcellona<sup>1,3</sup></span>
+    <span>Rahaf Aljundi<sup>2</sup></span>
+    <span>Stratis Gavves<sup>1</sup></span>
+    <span>Christian Gumbsch<sup>1</sup></span>
+  </p>
+  <p class="affils">
+    <span><sup>1</sup>University of Amsterdam</span>
+    <span><sup>2</sup>Toyota Motor Europe</span>
+    <span><sup>3</sup>NXAI</span>
+  </p>
+  <p class="contact">Correspondence: <a href="mailto:p.karageorgis@uva.nl">p.karageorgis@uva.nl</a></p>
+
+  <div class="venue">NeurIPS 2026 Workshop · RoboPAD</div>
+
+  <div class="buttons">
+    <!-- TODO: paper link (NeurIPS workshop PDF or arXiv) -->
+    <span class="btn soon" title="Coming soon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+      Paper <span class="tag">soon</span>
+    </span>
+    <!-- TODO: https://github.com/Platon-7/RoboRef once public -->
+    <span class="btn soon" title="Coming soon">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
+      Code <span class="tag">soon</span>
+    </span>
+    <!-- TODO: https://huggingface.co/roboref/... once public -->
+    <span class="btn soon" title="Coming soon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>
+      Weights <span class="tag">soon</span>
+    </span>
+    <a class="btn soon" href="#dataset">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+      Dataset <span class="tag">soon</span>
+    </a>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <p class="lead">Reward models that lead on offline benchmarks can fail to train a policy at all. RoboRef learns from <b>densely annotated failures</b> and an <b>asymmetric objective</b> that punishes over-estimated rewards, and trains the strongest policies in simulation and on a real robot.</p>
+    <div class="stats">
+      <div class="stat"><b>0.63 <span style="display:inline;font-size:18px">vs</span> 0.01</b><span>average final RL success over four simulated tasks: RoboRef vs. RoboReward-4B, the most accurate model offline</span></div>
+      <div class="stat"><b>τ = −0.87</b><span>Kendall correlation between offline accuracy and RL success across six reward models</span></div>
+      <div class="stat"><b>116,786</b><span>failure trajectories with dense per-frame progress labels in RBM-1M+</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap narrow">
+    <h2>Abstract</h2>
+    <p class="abstract">Reinforcement learning (RL) offers a general route for robots to learn to solve tasks from their own experience. However, designing the reward that guides this learning remains a bottleneck. Recent work therefore replaces hand-crafted reward functions with reward models fine-tuned from vision-language models (VLMs) on large robotic datasets, reporting strong prediction accuracy on offline benchmarks. Yet whether this accuracy carries over to successful RL training remains underexplored. We identify two gaps shared by most VLM reward models. First, the annotated robot data these models train on mostly contain successful behavior, which leaves them poorly equipped to judge the failures produced by a policy being optimized. Second, most models penalize over- and under-prediction of the reward equally, although false positives are the main cause of reward hacking, which poses a severe problem for downstream RL. We introduce RoboRef to close these gaps. To train RoboRef, we re-curate RBM-1M, a large-scale robot reward dataset, densely annotating its failures and adding new ones so that the model learns to score the failures it might encounter during RL. Furthermore, we introduce an asymmetric loss that penalizes over-prediction more harshly than under-prediction, yielding conservative rewards that are harder for a policy to exploit. We evaluate on offline metrics and downstream RL across three simulated benchmarks and two real-world manipulation tasks. We observe that the models that lead on offline benchmarks can fail to train a policy at all. RoboRef trains competent policies where these baselines never learn and delivers the strongest downstream performance, making it, to our knowledge, the state-of-the-art VLM reward model for robot RL.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Method</h2>
+    <p class="lead muted" style="margin-bottom:26px">RoboRef fine-tunes Robometer with two changes. Given a single camera view and an instruction, it predicts per-frame task progress and success, either of which serves as the reward.</p>
+    <figure class="fig">
+      <img src="static/img/fig/overview.png" alt="Overview: RoboRef builds on Robometer's pre-training, adds post-training on densely annotated robot failures, and trains with an asymmetric objective. At inference it predicts task success and task progress from image inputs and an instruction, and either serves as the reward for RL.">
+    </figure>
+    <div class="cards">
+      <div class="card">
+        <div class="num">01 · Data</div>
+        <h3>Failures with dense labels</h3>
+        <p>Existing reward datasets mostly contain successes, so failures, exactly what an optimizing policy produces, are out of distribution. We re-curate RBM-1M into RBM-1M+: 648,714 per-frame labeled clips, 116,786 of them failures. Simulated failures get their progress from simulator state; real-world failures are scored by a two-stage VLM–LLM labeling pipeline.</p>
+      </div>
+      <div class="card">
+        <div class="num">02 · Objective</div>
+        <h3>Asymmetric loss</h3>
+        <p>A false positive plants a spurious goal that the policy will seek out and exploit; a false negative only slows learning. Our objective penalizes over-prediction more heavily, so the model settles below its targets.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Simulated RL</h2>
+    <p class="lead muted" style="margin-bottom:26px">Every reward model is frozen and queried zero-shot on tasks held out from training. RoboRef trains the strongest policy on every task, including ones where no baseline learns at all.</p>
+    <figure class="fig">
+      <img src="static/img/fig/sim_rl.png" alt="Ground-truth success over training on ManiSkill PullCube-v1 with SAC and dense rewards, and MetaWorld Coffee-Push and Box-Close with IBRL and sparse rewards. RoboRef's curve rises well above all baselines on all three tasks.">
+      <figcaption>Mean ground-truth success over five seeds, shaded standard error. (a) SAC with dense rewards; (b, c) IBRL with sparse success rewards.</figcaption>
+    </figure>
+
+    <h2 style="margin-top:40px">Why it works: RoboRef rarely rewards failure</h2>
+    <p class="lead muted" style="margin-bottom:26px">A policy seeks out whatever its reward model over-scores. Robometer-4B rates a failed episode near-complete and detects success within a few steps; RoboRef stays low until the task is actually solved.</p>
+    <figure class="fig">
+      <img src="static/img/fig/traces.png" alt="Predicted progress and success of RoboRef and Robometer-4B on a failed and a successful ManiSkill episode. On the failed episode Robometer-4B predicts progress near 0.9 and detects success early; RoboRef stays near zero.">
+      <figcaption>Predicted progress (top) and success (bottom) on a failed (a) and a successful (b) ManiSkill <code>PullCube-v1</code> episode.</figcaption>
+    </figure>
+    <div class="results">
+      <div class="result">
+        <h3>On-policy rewards, ManiSkill <code>PullCube-v1</code></h3>
+        <table>
+          <tr><td></td><th>r̄<sub>fail</sub> ↓</th><th>AUROC ↑</th></tr>
+          <tr><td>Robometer-4B</td><td>0.72</td><td>0.43</td></tr>
+          <tr><td>Robo-Dopamine 2.0</td><td>0.59</td><td>0.78</td></tr>
+          <tr><td>RoboReward-4B</td><td>0.25</td><td>0.56</td></tr>
+          <tr><td>LRM-8B</td><td>0.63</td><td>0.64</td></tr>
+          <tr class="ours"><td>RoboRef</td><td>0.10</td><td>0.92</td></tr>
+        </table>
+      </div>
+      <div class="result">
+        <h3>Both ingredients contribute</h3>
+        <table>
+          <tr><td></td><th>r̄<sub>fail</sub> ↓</th><th>AUROC ↑</th></tr>
+          <tr><td>Robometer-4B</td><td>0.72</td><td>0.43</td></tr>
+          <tr><td>+ failure data</td><td>0.24</td><td>0.66</td></tr>
+          <tr class="ours"><td>+ asymmetric loss (RoboRef)</td><td>0.10</td><td>0.92</td></tr>
+        </table>
+        <p class="muted" style="font-size:14px;margin:10px 0 0">r̄<sub>fail</sub>: mean reward in failed episodes. AUROC: separation of successful vs. unsuccessful steps.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Real-world RL</h2>
+    <p class="lead muted" style="margin-bottom:26px">On a Franka FR3, RoboRef is the only reward: no hand-designed reward, queried frozen and zero-shot from one camera view.</p>
+    <figure class="fig">
+      <img src="static/img/fig/real_rl.png" alt="Real-world training success over episodes for Pick-Zucchini and Close-Pot-Lid. On Close-Pot-Lid, RoboRef's success rate rises to near 1 after episode 150 while Robometer-4B stays near zero.">
+      <figcaption>Smoothed ground-truth training success; ticks mark solved episodes. Only RoboRef learns <code>Close-Pot-Lid</code>.</figcaption>
+    </figure>
+    <div class="results">
+      <div class="result">
+        <h3>Frozen-policy evaluation, 30 episodes</h3>
+        <table>
+          <tr><td></td><th>Zucchini</th><th>Pot lid</th></tr>
+          <tr><td>Robometer-4B</td><td>53%</td><td>0%</td></tr>
+          <tr class="ours"><td>RoboRef</td><td>80%</td><td>90%</td></tr>
+        </table>
+      </div>
+      <div class="result">
+        <h3>Tasks</h3>
+        <p class="muted" style="font-size:15px;margin:0">In <code>Pick-Zucchini</code>, the robot must pick up a zucchini from the table. In <code>Close-Pot-Lid</code>, it holds a lid and must place it on a pot; a slightly misaligned or too-high release fails. The policy only moves the arm: closing the gripper and lifting, or opening it to release the lid, is scripted at episode end.</p>
+      </div>
+    </div>
+    <h3 style="margin-top:12px">Rollouts</h3>
+    <p class="muted" style="font-size:15px">Selected episodes, shown as the saved policy frames at 4 frames per second (not real time), with each model's logged progress, success and reward overlaid.</p>
+    <div class="videos">
+      <figure>
+        <video src="static/video/zucchini_roboref.mp4" autoplay muted loop playsinline preload="metadata"></video>
+        <figcaption><code>Pick-Zucchini</code> · <b class="ours">RoboRef</b> · training episode 130 · <span class="ok">success</span></figcaption>
+      </figure>
+      <figure>
+        <video src="static/video/zucchini_robometer.mp4" autoplay muted loop playsinline preload="metadata"></video>
+        <figcaption><code>Pick-Zucchini</code> · Robometer-4B · evaluation episode 12 · <span class="ok">success</span></figcaption>
+      </figure>
+      <figure>
+        <video src="static/video/lid_roboref.mp4" autoplay muted loop playsinline preload="metadata"></video>
+        <figcaption><code>Close-Pot-Lid</code> · <b class="ours">RoboRef</b> · training episode 185 · <span class="ok">success</span></figcaption>
+      </figure>
+      <figure>
+        <video src="static/video/lid_robometer_fail.mp4" autoplay muted loop playsinline preload="metadata"></video>
+        <figcaption><code>Close-Pot-Lid</code> · Robometer-4B · training episode 180 · <span class="fail">failure</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="dataset">
+  <div class="wrap">
+    <h2>RBM-1M+ dataset</h2>
+    <div class="data-teaser">
+      <p class="muted" style="margin-bottom:16px">Every failure carries a dense, non-monotonic progress score per frame. Here a cube is grasped, carried, then dropped (<code>FailSafe-stack</code>): the score climbs to 3 and falls back to 1.</p>
+      <div class="sim-strip">
+        <figure><img src="static/img/sim/f0.jpg" alt="frame 1" loading="lazy"><figcaption><span class="score">1</span></figcaption></figure>
+        <figure><img src="static/img/sim/f1.jpg" alt="frame 2" loading="lazy"><figcaption><span class="score">1</span></figcaption></figure>
+        <figure><img src="static/img/sim/f2.jpg" alt="frame 3" loading="lazy"><figcaption><span class="score">2</span></figcaption></figure>
+        <figure><img src="static/img/sim/f3.jpg" alt="frame 4" loading="lazy"><figcaption><span class="score">3</span></figcaption></figure>
+        <figure><img src="static/img/sim/f4.jpg" alt="frame 5" loading="lazy"><figcaption><span class="score">3</span></figcaption></figure>
+        <figure><img src="static/img/sim/f5.jpg" alt="frame 6" loading="lazy"><figcaption><span class="score">3</span></figcaption></figure>
+        <figure><img src="static/img/sim/f6.jpg" alt="frame 7" loading="lazy"><figcaption><span class="score drop">1</span></figcaption></figure>
+        <figure><img src="static/img/sim/f7.jpg" alt="frame 8" loading="lazy"><figcaption><span class="score drop">1</span></figcaption></figure>
+      </div>
+      <div class="ribbon"><span class="dot"></span>Coming soon: release pending approval</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap narrow">
+    <h2>BibTeX</h2>
+    <div class="bib">
+      <button class="copy" id="copy">Copy</button>
+<pre id="bibtex">@inproceedings{karageorgis2026roboref,
+  title     = {RoboRef: A Foundation Reward Model Built for Robot RL, Not Offline Metrics},
+  author    = {Karageorgis, Platon and Barcellona, Leonardo and Aljundi, Rahaf and Gavves, Stratis and Gumbsch, Christian},
+  booktitle = {NeurIPS 2026 Workshop on Post-Training Adaptation of Robot Foundation Models (RoboPAD)},
+  year      = {2026}
+}</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">University of Amsterdam · Toyota Motor Europe · NXAI</div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById('theme');
+    try { var saved = localStorage.getItem('theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+    btn.addEventListener('click', function () {
+      var dark = root.getAttribute('data-theme') === 'dark' ||
+        (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('theme', next); } catch (e) {}
+    });
+    document.getElementById('copy').addEventListener('click', function () {
+      var b = this;
+      navigator.clipboard.writeText(document.getElementById('bibtex').textContent).then(function () {
+        b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+      });
+    });
+  })();
+</script>
+</body>
+</html>
